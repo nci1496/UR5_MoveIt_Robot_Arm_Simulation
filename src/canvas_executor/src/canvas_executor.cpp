@@ -1,6 +1,9 @@
 #include <ros/ros.h>
 #include <geometry_msgs/PoseArray.h>
 #include <moveit/move_group_interface/move_group_interface.h>
+#include <moveit/planning_scene_interface/planning_scene_interface.h>
+#include <moveit/robot_model_loader/robot_model_loader.h>
+#include <moveit/robot_state/robot_state.h>
 #include <visualization_msgs/Marker.h>
 #include <signal.h>
 
@@ -19,8 +22,11 @@ public:
         , move_group_("manipulator")
     {
         // Get parameters
-        nh_.param("execution_delay", execution_delay_, 0.5);
+        nh_.param("execution_delay", execution_delay_, 0.1);
         nh_.param("publish_marker", publish_marker_, true);
+        nh_.param("max_velocity_scaling", max_velocity_scaling_, 0.5);
+        nh_.param("cartesian_step", cartesian_step_, 0.01);
+        nh_.param("jump_threshold", jump_threshold_, 0.0);
 
         // Publisher for trajectory marker
         marker_pub_ = nh_.advertise<visualization_msgs::Marker>(
@@ -31,9 +37,15 @@ public:
             "/canvas_trajectory", 10,
             &CanvasExecutor::trajectoryCallback, this);
 
+        // Timer to refresh velocity parameter from GUI
+        velocity_param_timer_ = nh_.createTimer(
+            ros::Duration(0.5),
+            &CanvasExecutor::refreshVelocityParam, this);
+
         ROS_INFO("Canvas Executor initialized!");
-        ROS_INFO("Subscribing to topic: canvas_trajectory");
+        ROS_INFO("Subscribing to topic: /canvas_trajectory");
         ROS_INFO("Publishing markers to: trajectory_marker");
+        ROS_INFO("Max velocity scaling: %.2f", max_velocity_scaling_);
 
         // Initialize marker
         initMarker();
@@ -69,8 +81,8 @@ public:
             publishTrajectoryMarker(msg);
         }
 
-        // Execute trajectory
-        executeTrajectory(msg);
+        // Execute trajectory using Cartesian path
+        executeCartesianTrajectory(msg);
     }
 
     void publishTrajectoryMarker(const geometry_msgs::PoseArray::ConstPtr& trajectory)
@@ -100,56 +112,60 @@ public:
         marker_pub_.publish(marker);
     }
 
-    void executeTrajectory(const geometry_msgs::PoseArray::ConstPtr& trajectory)
+    void executeCartesianTrajectory(const geometry_msgs::PoseArray::ConstPtr& trajectory)
     {
         if (trajectory->poses.empty()) return;
 
-        // Get current orientation as reference
-        geometry_msgs::Pose current_pose = move_group_.getCurrentPose().pose;
+        ROS_INFO("Starting Cartesian trajectory execution with %zu points...",
+                 trajectory->poses.size());
 
-        int success_count = 0;
-        int total_count = trajectory->poses.size();
+        // Get current pose as starting point
+        geometry_msgs::Pose start_pose = move_group_.getCurrentPose().pose;
 
-        ROS_INFO("Starting trajectory execution with %d points...", total_count);
+        // Build waypoints from trajectory
+        std::vector<geometry_msgs::Pose> waypoints;
+        waypoints.reserve(trajectory->poses.size());
 
-        for (size_t i = 0; i < trajectory->poses.size(); ++i)
-        {
-            if (g_shutdown) {
-                ROS_WARN("Shutdown requested, stopping trajectory!");
-                break;
-            }
-
-            const auto& target = trajectory->poses[i];
-
-            // Create pose target
-            geometry_msgs::Pose target_pose;
-            target_pose.position = target.position;
-            // Keep orientation from current pose for consistency
-            target_pose.orientation = current_pose.orientation;
-
-            move_group_.setPoseTarget(target_pose);
-
-            // Plan and execute
-            bool success = (move_group_.move() == moveit::core::MoveItErrorCode::SUCCESS);
-
-            if (success) {
-                success_count++;
-                if (i % 20 == 0 || i == trajectory->poses.size() - 1) {
-                    ROS_INFO("Progress: %zu/%zu points executed",
-                             i + 1, trajectory->poses.size());
-                }
-            } else {
-                ROS_WARN("Failed at point %zu: (%.3f, %.3f, %.3f)",
-                         i, target.position.x, target.position.y, target.position.z);
-            }
-
-            // Small delay between points
-            ros::Duration(execution_delay_).sleep();
+        for (const auto& pose_msg : trajectory->poses) {
+            geometry_msgs::Pose waypoint = pose_msg;
+            // Use a consistent orientation (from start pose)
+            waypoint.orientation = start_pose.orientation;
+            waypoints.push_back(waypoint);
         }
 
-        ROS_INFO("Trajectory execution complete! Success rate: %d/%d (%.1f%%)",
-                 success_count, total_count,
-                 100.0 * success_count / total_count);
+        // Compute Cartesian path
+        moveit_msgs::RobotTrajectory trajectory_msg;
+        double fraction = 0.0;
+        int attempts = 0;
+        const int max_attempts = 3;
+
+        while (fraction < 0.9 && attempts < max_attempts) {
+            fraction = move_group_.computeCartesianPath(
+                waypoints,
+                cartesian_step_,      // eef_step
+                jump_threshold_,       // jump_threshold (0 = disabled)
+                trajectory_msg,
+                true);                // avoid_collisions
+
+            attempts++;
+            ROS_INFO("Cartesian path computed: %.1f%% (attempt %d/%d)",
+                     fraction * 100, attempts, max_attempts);
+
+            if (fraction < 0.9) {
+                ROS_WARN("Path fraction %.1f%% < 90%%, retrying...", fraction * 100);
+                ros::Duration(0.5).sleep();
+            }
+        }
+
+        if (fraction < 0.5) {
+            ROS_ERROR("Failed to compute sufficient Cartesian path (%.1f%%)", fraction * 100);
+            return;
+        }
+
+        // Execute the trajectory
+        move_group_.execute(trajectory_msg);
+
+        ROS_INFO("Cartesian trajectory execution complete! Path coverage: %.1f%%", fraction * 100);
     }
 
     void publishMarkerOnce()
@@ -174,6 +190,18 @@ public:
         marker_pub_.publish(marker);
     }
 
+    void refreshVelocityParam(const ros::TimerEvent&)
+    {
+        double gui_velocity;
+        if (nh_.getParam("max_velocity_scaling", gui_velocity)) {
+            if (gui_velocity != current_velocity_) {
+                current_velocity_ = gui_velocity;
+                move_group_.setMaxVelocityScalingFactor(current_velocity_);
+                ROS_INFO("Velocity scaling updated to: %.2f", current_velocity_);
+            }
+        }
+    }
+
     void run()
     {
         ros::Rate rate(1); // 1 Hz
@@ -193,6 +221,11 @@ private:
 
     double execution_delay_;
     bool publish_marker_;
+    double max_velocity_scaling_;
+    double cartesian_step_;
+    double jump_threshold_;
+    double current_velocity_;
+    ros::Timer velocity_param_timer_;
 
     visualization_msgs::Marker marker_;
 };

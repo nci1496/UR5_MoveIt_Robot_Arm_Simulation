@@ -10,6 +10,10 @@
 #include <QTextEdit>
 #include <QVector>
 #include <QPointF>
+#include <QSpinBox>
+#include <QCheckBox>
+#include <QSlider>
+#include <QGroupBox>
 
 // ROS headers
 #include <ros/ros.h>
@@ -28,6 +32,10 @@ public:
 private slots:
     void onExecuteClicked();
     void onClearClicked();
+    void onSamplingChanged(int value);
+    void onMirrorChanged(bool checked);
+    void onMirrorZChanged(bool checked);
+    void onSpeedChanged(int value);
 
 private:
     void publishTrajectory();
@@ -37,6 +45,13 @@ private:
     QTextEdit *statusText;
     ros::NodeHandle nh_;
     ros::Publisher trajectory_pub_;
+
+    // Settings
+    QSpinBox *samplingSpinBox;
+    QCheckBox *mirrorCheckBox;
+    QCheckBox *mirrorZCheckBox;
+    QSlider *speedSlider;
+    QLabel *speedLabel;
 };
 
 #endif

@@ -17,12 +17,22 @@ void CanvasWidget::setCoordMapping(const CoordMapping &mapping)
 
 QPointF CanvasWidget::screenToArm(const QPoint &screenPos) const
 {
+    double normalized_x = screenPos.x() / coordMapping.screen_width;
+    if (mirror_) {
+        normalized_x = 1.0 - normalized_x;  // X轴镜像翻转
+    }
+
+    double normalized_y = screenPos.y() / coordMapping.screen_height;
+    if (mirrorZ_) {
+        normalized_y = 1.0 - normalized_y;  // Z轴镜像翻转
+    }
+
     double arm_x = coordMapping.arm_x_min +
-                   (screenPos.x() / coordMapping.screen_width) *
+                   normalized_x *
                    (coordMapping.arm_x_max - coordMapping.arm_x_min);
 
     double arm_z = coordMapping.arm_z_min +
-                   (screenPos.y() / coordMapping.screen_height) *
+                   normalized_y *
                    (coordMapping.arm_z_max - coordMapping.arm_z_min);
 
     return QPointF(arm_x, arm_z);
@@ -42,7 +52,7 @@ bool CanvasWidget::shouldAddPoint(const QPoint &newPoint)
 {
     // 使用曼哈顿距离作为近似
     int distance = (newPoint - lastPoint).manhattanLength();
-    return distance >= MIN_DISTANCE;
+    return distance >= minDistance_;
 }
 
 void CanvasWidget::mouseMoveEvent(QMouseEvent *event)

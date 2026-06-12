@@ -8,7 +8,7 @@ MainWindow::MainWindow(QWidget *parent)
         "/canvas_trajectory", 10, true);
 
     setWindowTitle("Virtual Canvas - Robot Arm Drawing");
-    setFixedSize(900, 550);
+    setFixedSize(900, 620);
 
     QWidget *centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
@@ -29,6 +29,43 @@ MainWindow::MainWindow(QWidget *parent)
     instructionLabel->setStyleSheet("color: #666; padding: 5px;");
     instructionLabel->setAlignment(Qt::AlignCenter);
     mainLayout->addWidget(instructionLabel);
+
+    // Settings panel
+    QGroupBox *settingsBox = new QGroupBox("Settings", this);
+    QHBoxLayout *settingsLayout = new QHBoxLayout(settingsBox);
+
+    // Sampling distance setting
+    QLabel *samplingLabel = new QLabel("Sampling Distance:", this);
+    samplingSpinBox = new QSpinBox(this);
+    samplingSpinBox->setRange(1, 20);
+    samplingSpinBox->setValue(5);
+    samplingSpinBox->setSuffix(" px");
+    settingsLayout->addWidget(samplingLabel);
+    settingsLayout->addWidget(samplingSpinBox);
+
+    // Mirror setting
+    mirrorCheckBox = new QCheckBox("Mirror X-axis", this);
+    mirrorCheckBox->setChecked(true);
+    settingsLayout->addWidget(mirrorCheckBox);
+
+    mirrorZCheckBox = new QCheckBox("Mirror Z-axis", this);
+    mirrorZCheckBox->setChecked(true);
+    settingsLayout->addWidget(mirrorZCheckBox);
+
+    // Speed setting
+    QLabel *speedSettingLabel = new QLabel("Speed:", this);
+    speedSlider = new QSlider(Qt::Horizontal, this);
+    speedSlider->setRange(1, 100);
+    speedSlider->setValue(50);
+    speedSlider->setMaximumWidth(150);
+    speedLabel = new QLabel("50%", this);
+    settingsLayout->addWidget(speedSettingLabel);
+    settingsLayout->addWidget(speedSlider);
+    settingsLayout->addWidget(speedLabel);
+
+    settingsLayout->addStretch();
+    settingsBox->setLayout(settingsLayout);
+    mainLayout->addWidget(settingsBox);
 
     // Canvas
     canvas = new CanvasWidget(this);
@@ -62,9 +99,21 @@ MainWindow::MainWindow(QWidget *parent)
 
     canvas->setStatusText(statusText);
 
+    // Set default mirror states
+    canvas->setMirror(true);
+    canvas->setMirrorZ(true);
+
     // Connect signals
     connect(executeBtn, &QPushButton::clicked, this, &MainWindow::onExecuteClicked);
     connect(clearBtn, &QPushButton::clicked, this, &MainWindow::onClearClicked);
+    connect(samplingSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &MainWindow::onSamplingChanged);
+    connect(mirrorCheckBox, &QCheckBox::toggled,
+            this, &MainWindow::onMirrorChanged);
+    connect(mirrorZCheckBox, &QCheckBox::toggled,
+            this, &MainWindow::onMirrorZChanged);
+    connect(speedSlider, &QSlider::valueChanged,
+            this, &MainWindow::onSpeedChanged);
 
     updateStatus("Ready. Draw on canvas and click Execute.");
 }
@@ -77,6 +126,31 @@ MainWindow::~MainWindow()
 void MainWindow::updateStatus(const QString& message)
 {
     statusText->append(message);
+}
+
+void MainWindow::onSamplingChanged(int value)
+{
+    canvas->setMinDistance(value);
+    updateStatus(QString("<span style='color: gray;'>Sampling distance set to %1 px.</span>").arg(value));
+}
+
+void MainWindow::onMirrorChanged(bool checked)
+{
+    canvas->setMirror(checked);
+    updateStatus(QString("<span style='color: gray;'>X-axis Mirror %1.</span>").arg(checked ? "enabled" : "disabled"));
+}
+
+void MainWindow::onMirrorZChanged(bool checked)
+{
+    canvas->setMirrorZ(checked);
+    updateStatus(QString("<span style='color: gray;'>Z-axis Mirror %1.</span>").arg(checked ? "enabled" : "disabled"));
+}
+
+void MainWindow::onSpeedChanged(int value)
+{
+    speedLabel->setText(QString("%1%").arg(value));
+    nh_.setParam("max_velocity_scaling", value / 100.0);
+    updateStatus(QString("<span style='color: gray;'>Speed set to %1%.</span>").arg(value));
 }
 
 void MainWindow::onExecuteClicked()
@@ -96,14 +170,12 @@ void MainWindow::onExecuteClicked()
     trajectory_msg.header.stamp = ros::Time::now();
     trajectory_msg.header.frame_id = "base_link";
 
-    // Get current orientation for consistency
-    // For simplicity, we'll use a default orientation
     trajectory_msg.poses.resize(armPoints.size());
 
     for (int i = 0; i < armPoints.size(); ++i) {
         trajectory_msg.poses[i].position.x = armPoints[i].x();       // arm_x
         trajectory_msg.poses[i].position.y = 0.55;                   // arm_y (fixed)
-        trajectory_msg.poses[i].position.z = armPoints[i].y();       // arm_z
+        trajectory_msg.poses[i].position.z = armPoints[i].y();        // arm_z
         trajectory_msg.poses[i].orientation.x = 1.0;
         trajectory_msg.poses[i].orientation.y = 0.0;
         trajectory_msg.poses[i].orientation.z = 0.0;
@@ -116,7 +188,6 @@ void MainWindow::onExecuteClicked()
     updateStatus("<span style='color: blue;'>Trajectory published to /canvas_trajectory!</span>");
     updateStatus("<span style='color: gray;'>Run 'rosrun canvas_executor canvas_executor' to execute.</span>");
 
-    // Also log to console
     ROS_INFO("Published trajectory with %d points", armPoints.size());
 }
 

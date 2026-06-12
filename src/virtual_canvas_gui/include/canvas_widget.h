@@ -31,6 +31,11 @@ public:
     QVector<QPointF> getDrawingPoints() const;
     void clear();
     void setStatusText(QTextEdit *text) { statusText = text; }
+    void setMinDistance(int distance) { minDistance_ = distance; }
+    void setMirror(bool mirror) { mirror_ = mirror; }
+    bool getMirror() const { return mirror_; }
+    void setMirrorZ(bool mirror) { mirrorZ_ = mirror; }
+    bool getMirrorZ() const { return mirrorZ_; }
 
 signals:
     void drawingUpdated();
@@ -47,7 +52,9 @@ private:
     CoordMapping coordMapping;
     QTextEdit *statusText;
     QPoint lastPoint;
-    static const int MIN_DISTANCE = 5;  // 最小采样距离（像素）
+    int minDistance_ = 5;
+    bool mirror_ = false;
+    bool mirrorZ_ = false;
 
     QPointF screenToArm(const QPoint &screenPos) const;
     bool shouldAddPoint(const QPoint &newPoint);

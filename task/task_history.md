@@ -56,9 +56,12 @@
 - [x] canvas_executor 订阅执行
 - [x] Marker轨迹可视化
 
-### Phase 6.3 后续功能
-- [ ] 轨迹平滑处理
-- [ ] 速度控制
+### Phase 6.3 GUI功能增强与轨迹优化
+
+- [x] 轨迹平滑处理（采用MoveIt Cartesian路径）
+- [x] 速度控制（GUI滑块控制max_velocity_scaling 1-100%）
+- [x] 采样率调节（GUI可设置最小采样距离 1-20 像素）
+- [x] 镜像控制（GUI可开关X轴和Z轴镜像）
 - [ ] 书写功能集成
 
 ---

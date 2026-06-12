@@ -7,6 +7,9 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   geometry_msgs
   moveit_ros_planning_interface
+  moveit_ros_planning
+  pluginlib
+  moveit_kinematics
 )
 
 ################################################
