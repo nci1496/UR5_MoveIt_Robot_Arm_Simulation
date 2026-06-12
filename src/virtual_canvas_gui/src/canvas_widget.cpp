@@ -33,15 +33,26 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton) {
         currentStroke.clear();
         currentStroke.append(event->pos());
+        lastPoint = event->pos();
         update();
     }
+}
+
+bool CanvasWidget::shouldAddPoint(const QPoint &newPoint)
+{
+    // 使用曼哈顿距离作为近似
+    int distance = (newPoint - lastPoint).manhattanLength();
+    return distance >= MIN_DISTANCE;
 }
 
 void CanvasWidget::mouseMoveEvent(QMouseEvent *event)
 {
     if (event->buttons() & Qt::LeftButton) {
-        currentStroke.append(event->pos());
-        update();
+        if (shouldAddPoint(event->pos())) {
+            currentStroke.append(event->pos());
+            lastPoint = event->pos();
+            update();
+        }
     }
 }
 

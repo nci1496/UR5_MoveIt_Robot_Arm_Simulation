@@ -3,6 +3,10 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
+    // Initialize ROS publisher
+    trajectory_pub_ = nh_.advertise<geometry_msgs::PoseArray>(
+        "/canvas_trajectory", 10, true);
+
     setWindowTitle("Virtual Canvas - Robot Arm Drawing");
     setFixedSize(900, 550);
 
@@ -11,11 +15,13 @@ MainWindow::MainWindow(QWidget *parent)
 
     QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);
 
+    // Title
     QLabel *titleLabel = new QLabel("Robot Arm Virtual Canvas", this);
     titleLabel->setStyleSheet("font-size: 18px; font-weight: bold; padding: 10px;");
     titleLabel->setAlignment(Qt::AlignCenter);
     mainLayout->addWidget(titleLabel);
 
+    // Instructions
     QLabel *instructionLabel = new QLabel(
         "Draw on the canvas below. Coordinates will be mapped to robot arm space:\n"
         "X: -0.4 ~ 0.3, Y: 0.55 (fixed), Z: 0.2 ~ 0.55",
@@ -24,9 +30,11 @@ MainWindow::MainWindow(QWidget *parent)
     instructionLabel->setAlignment(Qt::AlignCenter);
     mainLayout->addWidget(instructionLabel);
 
+    // Canvas
     canvas = new CanvasWidget(this);
     mainLayout->addWidget(canvas);
 
+    // Buttons
     QHBoxLayout *buttonLayout = new QHBoxLayout();
 
     QPushButton *executeBtn = new QPushButton("Execute (执行)", this);
@@ -45,6 +53,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     mainLayout->addLayout(buttonLayout);
 
+    // Status text
     statusText = new QTextEdit(this);
     statusText->setMaximumHeight(80);
     statusText->setReadOnly(true);
@@ -53,8 +62,21 @@ MainWindow::MainWindow(QWidget *parent)
 
     canvas->setStatusText(statusText);
 
+    // Connect signals
     connect(executeBtn, &QPushButton::clicked, this, &MainWindow::onExecuteClicked);
     connect(clearBtn, &QPushButton::clicked, this, &MainWindow::onClearClicked);
+
+    updateStatus("Ready. Draw on canvas and click Execute.");
+}
+
+MainWindow::~MainWindow()
+{
+    // ROS will be cleaned up automatically
+}
+
+void MainWindow::updateStatus(const QString& message)
+{
+    statusText->append(message);
 }
 
 void MainWindow::onExecuteClicked()
@@ -62,30 +84,44 @@ void MainWindow::onExecuteClicked()
     QVector<QPointF> armPoints = canvas->getDrawingPoints();
 
     if (armPoints.isEmpty()) {
-        statusText->append("<span style='color: orange;'>No drawing detected!</span>");
+        updateStatus("<span style='color: orange;'>No drawing detected! Draw something first.</span>");
         return;
     }
 
-    statusText->append(QString("<span style='color: green;'>Executing trajectory with %1 points...</span>").arg(armPoints.size()));
+    updateStatus(QString("<span style='color: green;'>Publishing trajectory with %1 points...</span>")
+        .arg(armPoints.size()));
 
-    for (int i = 0; i < armPoints.size(); i += 50) {
-        QPointF pt = armPoints[i];
-        statusText->append(QString("  Point %1: X=%2, Z=%3")
-            .arg(i)
-            .arg(pt.x(), 0, 'f', 3)
-            .arg(pt.y(), 0, 'f', 3));
+    // Create PoseArray message
+    geometry_msgs::PoseArray trajectory_msg;
+    trajectory_msg.header.stamp = ros::Time::now();
+    trajectory_msg.header.frame_id = "base_link";
+
+    // Get current orientation for consistency
+    // For simplicity, we'll use a default orientation
+    trajectory_msg.poses.resize(armPoints.size());
+
+    for (int i = 0; i < armPoints.size(); ++i) {
+        trajectory_msg.poses[i].position.x = armPoints[i].x();       // arm_x
+        trajectory_msg.poses[i].position.y = 0.55;                   // arm_y (fixed)
+        trajectory_msg.poses[i].position.z = armPoints[i].y();       // arm_z
+        trajectory_msg.poses[i].orientation.x = 1.0;
+        trajectory_msg.poses[i].orientation.y = 0.0;
+        trajectory_msg.poses[i].orientation.z = 0.0;
+        trajectory_msg.poses[i].orientation.w = 0.0;
     }
 
-    if (armPoints.size() > 0) {
-        statusText->append(QString("  ... Total %1 points")
-            .arg(armPoints.size()));
-    }
+    // Publish trajectory
+    trajectory_pub_.publish(trajectory_msg);
 
-    statusText->append("<span style='color: blue;'>Note: Publish to ROS Topic '/canvas_trajectory' for arm execution.</span>");
+    updateStatus("<span style='color: blue;'>Trajectory published to /canvas_trajectory!</span>");
+    updateStatus("<span style='color: gray;'>Run 'rosrun canvas_executor canvas_executor' to execute.</span>");
+
+    // Also log to console
+    ROS_INFO("Published trajectory with %d points", armPoints.size());
 }
 
 void MainWindow::onClearClicked()
 {
     canvas->clear();
-    statusText->append("<span style='color: gray;'>Canvas cleared.</span>");
+    updateStatus("<span style='color: gray;'>Canvas cleared.</span>");
 }

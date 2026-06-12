@@ -46,8 +46,11 @@ private:
     QVector<QVector<QPoint>> allStrokes;
     CoordMapping coordMapping;
     QTextEdit *statusText;
+    QPoint lastPoint;
+    static const int MIN_DISTANCE = 5;  // 最小采样距离（像素）
 
     QPointF screenToArm(const QPoint &screenPos) const;
+    bool shouldAddPoint(const QPoint &newPoint);
 };
 
 #endif

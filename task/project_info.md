@@ -1,39 +1,91 @@
-# UR5 MoveIt Robot Arm Simulation Project
+# 项目信息
 
-## Platform
+## 项目名称
 
-Ubuntu 20.04
-ROS Noetic
-MoveIt
-RViz
+基于ROS Noetic与MoveIt的UR5机械臂轨迹规划与控制仿真系统
 
-## Robot
+## 项目性质
+
+机器人学实验大作业
+
+## 开发环境
+
+- Ubuntu 20.04
+- ROS Noetic
+- MoveIt
+- RViz
+- C++
+
+## 机械臂型号
 
 UR5
 
-## Course
+## 项目目标
 
-Robot Simulation Assignment
+完成机械臂点位控制与轨迹控制。满足课程要求：
 
-## Project Goal
+1. 六个空间点位运动
+2. 椭圆轨迹运动
+3. 8字轨迹运动
+4. 其他创新功能
 
-1. Point-to-point control
-2. Six-point motion
-3. Cartesian trajectory planning
-4. Ellipse trajectory
-5. Figure-eight trajectory
-6. Trajectory visualization
-7. Virtual writing system (planned)
+## 当前进度
 
-## Workspace
+基础功能已完成：
 
-~/robot_arm_hw
+- MoveIt环境搭建
+- UR5加载
+- 点位控制
+- 六点控制
+- 当前位姿获取
+- 笛卡尔直线轨迹
+- 椭圆轨迹
+- 8字轨迹
+- Marker轨迹显示
 
-## Package
+## 运行指令
 
-arm_control_demo
+### 1. 启动机械臂仿真环境（必须先执行）
 
-要求：
-1.每次仅完成指定任务，验收完成即可，其余文件如无必要，不修改。
+```bash
+roslaunch ur5_moveit_config demo.launch
+```
 
-2.有关于环境的，不需要你做任何修改和编译，你给我指令和验收预计情况，我会单独在编译运行，然后反馈
+### 2. 运行测试节点
+
+```bash
+cd ~/robot_arm_hw
+source devel/setup.bash
+
+# 点位移动测试
+rosrun arm_control_demo move_to_point
+
+# 六点轨迹测试
+rosrun arm_control_demo six_points
+
+# 工作空间验证
+rosrun arm_control_demo workspace_test
+
+# 笛卡尔直线
+rosrun arm_control_demo cartesian_line
+
+# 椭圆轨迹
+rosrun arm_control_demo ellipse_path
+
+# 8字轨迹
+rosrun arm_control_demo eight_path
+```
+
+### 3. 虚拟画板GUI
+
+```bash
+# 终端1：GUI（发布轨迹）
+rosrun virtual_canvas_gui virtual_canvas_gui
+
+# 终端2：执行器（订阅轨迹并控制机械臂）
+rosrun canvas_executor canvas_executor
+```
+
+## 后续方向
+
+以"机械臂书写系统"为主线继续扩展。
