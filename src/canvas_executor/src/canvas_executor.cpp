@@ -26,9 +26,9 @@ public:
         marker_pub_ = nh_.advertise<visualization_msgs::Marker>(
             "trajectory_marker", 10, true);
 
-        // Subscriber for canvas trajectory
+        // Subscriber for canvas trajectory (absolute path)
         trajectory_sub_ = nh_.subscribe(
-            "canvas_trajectory", 10,
+            "/canvas_trajectory", 10,
             &CanvasExecutor::trajectoryCallback, this);
 
         ROS_INFO("Canvas Executor initialized!");
